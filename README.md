@@ -13,7 +13,7 @@ Unlike most mobile games that rely on heavy engine frameworks like *Flame*, this
 ## 🎥 Gameplay Preview
 
 <div align="center">
-  <video src="doc/example.mp4" width="100%" max-width="800px" controls autoplay loop muted></video>
+  <video src="https://drive.google.com/uc?export=download&id=1Vq6G74Ll6JRd5T6rBRKQQoGCEiFwFn_2" width="100%" max-width="1600px" height="100%" max-height="100%" controls autoplay loop muted></video>
 </div>
 
 ---
