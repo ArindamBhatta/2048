@@ -28,7 +28,12 @@ class GameEngine {
       );
       state = _spawnRandomStaticTile(state);
       state = _spawnRandomStaticTile(state);
-      return state;
+      
+      int maxScore = 0;
+      for (var t in state.staticTiles) {
+        if (t.value > maxScore) maxScore = t.value;
+      }
+      return state.copyWithUpdates(score: maxScore);
     }
   }
 
@@ -94,7 +99,6 @@ class GameEngine {
     
     // Add to static tiles
     List<Tile> currentTiles = List.from(state.staticTiles)..add(landedTile);
-    int currentScore = state.score;
 
     bool boardChanged = true;
     while (boardChanged) {
@@ -108,10 +112,9 @@ class GameEngine {
       }
 
       // 2. Evaluate merges
-      final mergeResult = _evaluateMerges(currentTiles, currentScore);
+      final mergeResult = _evaluateMerges(currentTiles);
       if (mergeResult.changed) {
         currentTiles = mergeResult.tiles;
-        currentScore = mergeResult.score;
         boardChanged = true;
       }
     }
@@ -119,9 +122,14 @@ class GameEngine {
     // Check game over
     bool isGameOver = currentTiles.any((t) => t.row >= BoardState.boundaryRow);
 
+    int maxScore = 0;
+    for (var t in currentTiles) {
+      if (t.value > maxScore) maxScore = t.value;
+    }
+
     final nextState = state.copyWithUpdates(
       staticTiles: currentTiles,
-      score: currentScore,
+      score: maxScore,
       gameOver: isGameOver,
       isAnimating: false,
     ).copyWithActiveTile(null);
@@ -168,7 +176,7 @@ class GameEngine {
     return _GravityResult(newTiles, changed);
   }
 
-  _MergeResult _evaluateMerges(List<Tile> tiles, int score) {
+  _MergeResult _evaluateMerges(List<Tile> tiles) {
     List<Tile> currentTiles = List.from(tiles);
     
     // Group by col and row for easy lookup
@@ -193,7 +201,7 @@ class GameEngine {
           // Merge tAbove INTO t
           currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == tAbove.id);
           currentTiles.add(t.copyWith(value: t.value * 2)); // keeps t's position
-          return _MergeResult(currentTiles, score + (t.value * 2), true);
+          return _MergeResult(currentTiles, true);
         }
 
         // Check horizontal merge (tile to the right)
@@ -202,12 +210,12 @@ class GameEngine {
           // Merge tRight INTO t
           currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == tRight.id);
           currentTiles.add(t.copyWith(value: t.value * 2));
-          return _MergeResult(currentTiles, score + (t.value * 2), true);
+          return _MergeResult(currentTiles, true);
         }
       }
     }
     
-    return _MergeResult(currentTiles, score, false);
+    return _MergeResult(currentTiles, false);
   }
 
   BoardState swipe(BoardState state, String direction) {
@@ -215,7 +223,6 @@ class GameEngine {
 
     List<Tile> currentTiles = List.from(state.staticTiles);
     bool changed = false;
-    int currentScore = state.score;
 
     if (direction == 'left' || direction == 'right') {
       for (int r = 0; r < BoardState.rows; r++) {
@@ -232,7 +239,6 @@ class GameEngine {
             currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == rowTiles[i+1].id);
             final merged = t.copyWith(value: t.value * 2, column: insertPos);
             currentTiles.add(merged);
-            currentScore += merged.value;
             changed = true;
             insertPos += step;
             i++; 
@@ -261,7 +267,6 @@ class GameEngine {
             currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == colTiles[i+1].id);
             final merged = t.copyWith(value: t.value * 2, row: insertPos);
             currentTiles.add(merged);
-            currentScore += merged.value;
             changed = true;
             insertPos += step;
             i++; 
@@ -278,8 +283,14 @@ class GameEngine {
     }
 
     if (changed) {
-      BoardState newState = state.copyWithUpdates(staticTiles: currentTiles, score: currentScore);
+      BoardState newState = state.copyWithUpdates(staticTiles: currentTiles);
       newState = _spawnRandomStaticTile(newState);
+      
+      int maxScore = 0;
+      for (var t in newState.staticTiles) {
+        if (t.value > maxScore) maxScore = t.value;
+      }
+      newState = newState.copyWithUpdates(score: maxScore);
       
       bool canMove = false;
       if (newState.staticTiles.length < BoardState.columns * BoardState.rows) {
@@ -316,7 +327,6 @@ class _GravityResult {
 
 class _MergeResult {
   final List<Tile> tiles;
-  final int score;
   final bool changed;
-  _MergeResult(this.tiles, this.score, this.changed);
+  _MergeResult(this.tiles, this.changed);
 }

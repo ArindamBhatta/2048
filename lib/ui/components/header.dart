@@ -10,7 +10,8 @@ class HeaderWidget extends ConsumerWidget {
     final state = ref.watch(gameStateProvider);
 
     return Container(
-      color: const Color(0xFF45414C), // Slightly different shade for header area
+      color:
+          const Color(0xFF45414C), // Slightly different shade for header area
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       child: Stack(
         alignment: Alignment.center,
@@ -18,26 +19,23 @@ class HeaderWidget extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () {
-                  // close button placeholder
-                },
-              ),
               Container(
                 decoration: BoxDecoration(
-                  color: state.isGravityMode ? Colors.white24 : Colors.blueAccent.withValues(alpha: 0.5),
+                  color: state.isGravityMode
+                      ? Colors.white24
+                      : Colors.blueAccent.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
                   icon: Icon(
-                    state.isGravityMode ? Icons.settings : Icons.grid_on, 
-                    color: Colors.white
-                  ),
+                      state.isGravityMode ? Icons.settings : Icons.grid_on,
+                      color: Colors.white),
                   onPressed: () {
                     ref.read(gameStateProvider.notifier).toggleMode();
                   },
-                  tooltip: state.isGravityMode ? 'Switch to Classic Mode' : 'Switch to Gravity Mode',
+                  tooltip: state.isGravityMode
+                      ? 'Switch to Classic Mode'
+                      : 'Switch to Gravity Mode',
                 ),
               ),
             ],
@@ -55,4 +53,3 @@ class HeaderWidget extends ConsumerWidget {
     );
   }
 }
-

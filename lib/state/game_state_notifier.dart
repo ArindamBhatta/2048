@@ -22,8 +22,18 @@ class GameNotifier extends Notifier<BoardState> {
   }
 
   void toggleMode() {
-    state = state.copyWith(isGravityMode: !state.isGravityMode);
-    resetGame();
+    final nextMode = !state.isGravityMode;
+    BoardState newState = state.copyWith(isGravityMode: nextMode);
+    
+    if (nextMode) {
+      if (newState.activeTile == null && !newState.gameOver) {
+        newState = _engine.spawnNextTile(newState);
+      }
+    } else {
+      newState = newState.copyWithActiveTile(null);
+    }
+    
+    state = newState;
   }
 
   void swipe(String direction) {
