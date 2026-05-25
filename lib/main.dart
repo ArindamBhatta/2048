@@ -4,14 +4,15 @@ import 'ui/game_screen.dart';
 
 void main() {
   runApp(
+    //riverpod is initialized here so that it can be used throughout the app
     const ProviderScope(
-      child: MyApp(),
+      child: CubeGame(),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class CubeGame extends StatelessWidget {
+  const CubeGame({super.key});
 
   @override
   Widget build(BuildContext context) {

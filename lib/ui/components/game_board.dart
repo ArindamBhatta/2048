@@ -13,14 +13,16 @@ class GameBoardWidget extends ConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final colWidth = constraints.maxWidth / BoardState.columns;
-        final rowHeight = constraints.maxHeight / BoardState.rows;
+        final double colWidth = constraints.maxWidth / BoardState.columns;
+        final double rowHeight = constraints.maxHeight / BoardState.rows;
+
         // Make tiles square or slightly rectangular based on available space
         final tileSize = colWidth < rowHeight ? colWidth : rowHeight;
-        
+
         // Ensure the grid fits in the center
-        final boardWidth = tileSize * BoardState.columns;
-        final boardHeight = tileSize * BoardState.rows;
+        final double boardWidth = tileSize * BoardState.columns;
+
+        final double boardHeight = tileSize * BoardState.rows;
 
         return Center(
           child: SizedBox(
@@ -29,7 +31,7 @@ class GameBoardWidget extends ConsumerWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                // Highlight active column
+                // ------ Highlight active column show to the user how it's drop-----
                 if (state.activeTile != null)
                   Positioned(
                     left: state.activeTile!.column * tileSize,
@@ -40,10 +42,10 @@ class GameBoardWidget extends ConsumerWidget {
                       color: Colors.white.withValues(alpha: 0.03),
                     ),
                   ),
-                
-                // Boundary Line
+
+                // ---- Boundary Line show the game over line ---
                 Positioned(
-                  top: (BoardState.rows - BoardState.boundaryRow) * tileSize, // Invert Y
+                  top: (BoardState.rows - BoardState.boundaryRow) * tileSize,
                   left: 0,
                   right: 0,
                   child: Row(
@@ -52,14 +54,16 @@ class GameBoardWidget extends ConsumerWidget {
                       (index) => Expanded(
                         child: Container(
                           height: 2,
-                          color: index % 2 == 0 ? Colors.white.withValues(alpha: 0.2) : Colors.transparent,
+                          color: index % 2 == 0
+                              ? Colors.white.withValues(alpha: 0.2)
+                              : Colors.transparent,
                         ),
                       ),
                     ),
                   ),
                 ),
 
-                // Static Tiles
+                /// Static Tiles -> tiles that are already placed
                 for (final tile in state.staticTiles)
                   Positioned(
                     left: tile.column * tileSize,
@@ -75,13 +79,13 @@ class GameBoardWidget extends ConsumerWidget {
                     ),
                   ),
 
-                // Active Tile
+                // Active Tile are those tile which come from top
                 if (state.activeTile != null)
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 100),
                     curve: Curves.easeOut,
                     left: state.activeTile!.column * tileSize,
-                    bottom: state.activeTile!.row * tileSize, // Spawns at spawnRow
+                    bottom: state.activeTile!.row * tileSize,
                     width: tileSize,
                     height: tileSize,
                     child: Padding(
@@ -99,4 +103,3 @@ class GameBoardWidget extends ConsumerWidget {
     );
   }
 }
-
