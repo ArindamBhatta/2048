@@ -4,8 +4,6 @@ The game is purely made using Flutter's Animation System using AnimatedWidget an
 
 The project is made in **Flutter 3.0** at the moment and is not related in anyway to the Flame Game Engine or the Game toolking the Flutter team released with version 3.0
 
-![Running the game on Web, Android, iOS and MacOS](https://user-images.githubusercontent.com/9529847/172562297-78396f12-ab27-472a-91fa-2fd788a54edf.png)
-
 # Running the Game
 
 1. Get Packages

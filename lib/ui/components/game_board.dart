@@ -29,17 +29,33 @@ class GameBoardWidget extends ConsumerWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                // Background Grid
-                _buildGridBackground(tileSize),
+                // Highlight active column
+                if (state.activeTile != null)
+                  Positioned(
+                    left: state.activeTile!.column * tileSize,
+                    top: 0,
+                    bottom: 0,
+                    width: tileSize,
+                    child: Container(
+                      color: Colors.white.withValues(alpha: 0.03),
+                    ),
+                  ),
                 
                 // Boundary Line
                 Positioned(
                   top: (BoardState.rows - BoardState.boundaryRow) * tileSize, // Invert Y
                   left: 0,
                   right: 0,
-                  child: Container(
-                    height: 2,
-                    color: Colors.redAccent,
+                  child: Row(
+                    children: List.generate(
+                      15,
+                      (index) => Expanded(
+                        child: Container(
+                          height: 2,
+                          color: index % 2 == 0 ? Colors.white.withValues(alpha: 0.2) : Colors.transparent,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
 
@@ -51,7 +67,7 @@ class GameBoardWidget extends ConsumerWidget {
                     width: tileSize,
                     height: tileSize,
                     child: Padding(
-                      padding: const EdgeInsets.all(4.0),
+                      padding: const EdgeInsets.all(2.0),
                       child: TileWidget(
                         value: tile.value,
                         isStatic: true,
@@ -69,7 +85,7 @@ class GameBoardWidget extends ConsumerWidget {
                     width: tileSize,
                     height: tileSize,
                     child: Padding(
-                      padding: const EdgeInsets.all(4.0),
+                      padding: const EdgeInsets.all(2.0),
                       child: TileWidget(
                         value: state.activeTile!.value,
                       ),
@@ -82,25 +98,5 @@ class GameBoardWidget extends ConsumerWidget {
       },
     );
   }
-
-  Widget _buildGridBackground(double tileSize) {
-    return Column(
-      children: List.generate(
-        BoardState.rows,
-        (r) => Row(
-          children: List.generate(
-            BoardState.columns,
-            (c) => Container(
-              width: tileSize,
-              height: tileSize,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-                color: Colors.grey.withValues(alpha: 0.05),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
+

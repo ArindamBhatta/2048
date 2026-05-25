@@ -1,60 +1,356 @@
-# Drop 2048 - Game Architecture
+# Drop 2048 — Required Architectural Corrections
 
-## 1. Overview
-This document outlines the architecture for the new "Drop 2048" game, moving away from the classic sliding-grid mechanics to a gravity-based puzzle format. In this variant, tiles containing numbers (2, 4, 8, 16, etc.) drop from the top of the screen. The player controls which column the tile falls into. If a tile lands on or adjacent to a tile of the same value, they merge. A top boundary line dictates the game-over condition.
+The current implementation direction is incorrect because it still treats the game like classic 2048 grid movement.
 
-## 2. Core Mechanics
-*   **Tile Spawning:** A new tile spawns at the top of the screen (above the boundary line).
-*   **Player Control:** The player swipes horizontally to position the active tile over a specific column, and taps (or swipes down) to drop it.
-*   **Gravity:** Once dropped, the tile falls straight down until it hits the floor of the grid or the top of another tile in that column.
-*   **Merging:** 
-    *   **Vertical:** If a falling tile hits a tile of the same number, they merge into a single tile with double the value (e.g., 8 + 8 = 16).
-    *   **Horizontal:** After a tile lands, if the adjacent tile(s) in the neighboring columns have the same value, they merge.
-    *   **Chain Reactions:** Merging can create empty space, causing tiles above to fall further. Newly formed tiles can trigger subsequent merges.
-*   **Boundary Line (Game Over):** A visible line at the top of the grid. If the stack of tiles in any column remains above this line after all merges settle, the game ends.
+This game is NOT a matrix-transform puzzle.
 
-## 3. Architecture Pattern
-The project will follow a strict layered architecture to ensure separation of concerns, utilizing **Riverpod** for state management and dependency injection. The data flow is strictly unidirectional: **UI Layer -> Riverpod (State/Providers) -> Service/Business Logic Layer -> Model (Data Layer)**.
+It is:
 
-### 3.1. Models (Data Layer)
-Pure data classes representing the core entities.
-*   `Tile`: Represents a single block. Contains `id` (unique), `value` (2, 4, 8...), and `position` (row/column coordinates).
-*   `BoardState`: Represents the grid state, keeping track of a 2D array or lists of columns containing static tiles, as well as the active falling tile.
+* a deterministic falling-object simulation
+* with merge resolution
+* cascade processing
+* and gravity stabilization
 
-### 3.2. Service/Business Logic Layer
-Pure Dart classes responsible for the core game rules and logic, independent of Flutter UI and Riverpod state.
-*   `GameEngine`: The core engine handling game rules.
-    *   `spawnNextTile()`: Generates the next active tile.
-    *   `calculateDropLanding(int column)`: Calculates where a tile should stop falling.
-    *   `evaluateMerges(BoardState currentState)`: Checks for vertical and horizontal merges and returns the new board state.
-    *   `applyGravity(BoardState currentState)`: Pulls tiles down if empty spaces exist below them and returns the updated state.
-    *   `checkGameOver(BoardState currentState)`: Validates if any column exceeds the boundary line.
+The architecture must be redesigned around an event-resolution pipeline.
 
-### 3.3. Riverpod (State Management Layer)
-Acts as the glue between the UI and the Business Logic. Exposes state to the UI and handles intent from the UI by calling the Business Logic layer.
-*   `GameStateNotifier` (or `Notifier`/`AsyncNotifier`): Holds the current `BoardState`.
-    *   Exposes methods for the UI to call: `moveActiveTile(int column)`, `dropTile()`.
-    *   Internally uses `GameEngine` to calculate the new state and updates itself, which in turn rebuilds the UI.
+---
 
-### 3.4. Views (UI Layer)
-*   `GameScreen`: The main scaffold.
-*   `HeaderWidget`: Displays the current score, high score, and a preview of the *next* tile.
-*   `GameBoardWidget`: A custom widget (e.g., using a Stack) representing the playable area.
-    *   `BoundaryLineWidget`: A static visual cue indicating the danger zone.
-    *   `StaticTilesLayer`: Renders the tiles that have already landed.
-    *   `ActiveTileLayer`: Renders the tile currently being controlled by the player.
+# CRITICAL DESIGN CORRECTIONS
 
-## 4. Animation and Physics
-Since the game is column-based, we do not strictly need a complex physics engine like Flame or Forge2D. We can achieve this with Flutter's built-in `AnimationController` and `Tween`s:
-*   **Fall Animation:** When a tile is dropped, animate its Y-coordinate from the top to the calculated landing row.
-*   **Merge Animation:** A quick "pop" scale animation (Scale up to 1.2x, then back to 1.0x) when a merge occurs, along with updating the tile color and number.
+## 1. STOP USING ROW-FIRST THINKING
 
-## 5. Implementation Roadmap
-1.  **State Management Setup:** Initialize the column-based grid data structure.
-2.  **UI Layout:** Create the basic layout with columns, boundary line, and score display.
-3.  **Active Tile Controls:** Implement horizontal dragging and dropping mechanics.
-4.  **Landing & Collision:** Calculate where a tile should stop falling and update the grid state.
-5.  **Merge Logic:** Implement the algorithm to find adjacent identical tiles (vertical and horizontal) and execute the merge.
-6.  **Chain Reaction & Gravity:** Ensure that when tiles merge horizontally, any unsupported tiles above them fall down.
-7.  **Game Over Condition:** Hook up the boundary line check.
-8.  **Polish:** Add animations, sounds, and vibrant colors for higher-tier tiles.
+Current wrong mental model:
+
+* board[row][column]
+* move all tiles
+* transform matrix
+
+This is incorrect for Drop 2048.
+
+Correct mental model:
+
+* columns are vertical stacks
+* only one active tile exists at a time
+* tiles fall downward
+* merges occur after collision resolution
+
+Rows are only a rendering concept.
+
+Internally, the board should behave like:
+
+```dart
+List<List<Tile>> columns;
+```
+
+Example:
+
+```dart
+columns[0] = [2, 4, 8];
+columns[1] = [2];
+columns[2] = [];
+```
+
+This simplifies:
+
+* gravity
+* collision
+* landing
+* merge resolution
+* cascades
+
+---
+
+# 2. ACTIVE TILE MUST BE SEPARATE FROM BOARD
+
+Do NOT insert falling tile into board state before landing.
+
+WRONG:
+
+```dart
+board.tiles.add(activeTile)
+```
+
+CORRECT:
+
+```dart
+class BoardState {
+  List<List<Tile>> columns;
+  Tile? activeTile;
+}
+```
+
+The active tile is temporary simulation state.
+
+Only commit it after landing resolution.
+
+---
+
+# 3. REMOVE PIXEL POSITION FROM CORE STATE
+
+Core state must NEVER store:
+
+* x
+* y
+* pixelOffset
+* animation values
+
+Core state must only store logical state:
+
+```dart
+class Tile {
+  final int id;
+  final int value;
+  final int column;
+  final int stackIndex;
+}
+```
+
+UI computes pixel positions separately.
+
+---
+
+# 4. GAME ENGINE MUST BECOME PIPELINE-BASED
+
+Current likely issue:
+
+* giant GameEngine class
+* direct mutation
+* merge while iterating
+* UI-driven logic
+
+This causes instability.
+
+The engine must become deterministic pipeline processing.
+
+Required architecture:
+
+```text
+GameEngine
+ ├── DropResolver
+ ├── MergeDetector
+ ├── MergeExecutor
+ ├── GravityResolver
+ └── GameOverResolver
+```
+
+Each resolver performs ONE responsibility only.
+
+---
+
+# 5. NEVER MERGE DURING ITERATION
+
+This is a major bug source.
+
+WRONG:
+
+```dart
+for (...) {
+   if (sameValue) {
+      mergeImmediately();
+   }
+}
+```
+
+This causes:
+
+* skipped tiles
+* double merges
+* inconsistent cascades
+
+Correct approach:
+
+1. detect merges
+2. queue merge operations
+3. apply merges afterward
+
+Required structure:
+
+```dart
+class MergeOperation {
+  final Tile sourceA;
+  final Tile sourceB;
+  final int resultValue;
+  final int targetColumn;
+}
+```
+
+Pipeline:
+
+```text
+detect
+-> queue
+-> resolve
+-> apply gravity
+-> repeat
+```
+
+---
+
+# 6. CASCADE LOOP IS THE CORE SYSTEM
+
+After every merge:
+
+* empty spaces appear
+* upper tiles fall
+* new merges may become possible
+
+Engine MUST repeatedly stabilize board state.
+
+Required loop:
+
+```dart
+while (true) {
+   final merges = detectMerges();
+
+   if (merges.isEmpty) {
+      break;
+   }
+
+   applyMerges(merges);
+
+   applyGravity();
+}
+```
+
+This stabilization loop is the heart of the game.
+
+---
+
+# 7. PLAYER INPUT MUST LOCK DURING RESOLUTION
+
+Once drop starts:
+
+* disable movement
+* disable additional drops
+
+Otherwise race conditions occur.
+
+Required phases:
+
+```text
+SPAWN
+-> CONTROL
+-> DROP
+-> RESOLVE
+-> STABILIZE
+-> NEXT TURN
+```
+
+Only CONTROL phase accepts input.
+
+---
+
+# 8. UI MUST NOT DRIVE GAME LOGIC
+
+Animations are visual only.
+
+Logic calculates final board instantly.
+
+Then UI animates toward resulting state.
+
+WRONG:
+
+* animation updates board state
+
+CORRECT:
+
+* board state updates instantly
+* UI interpolates visuals afterward
+
+---
+
+# 9. GRAVITY MUST BE DETERMINISTIC
+
+Do NOT use real physics engines.
+
+Do NOT use:
+
+* Forge2D
+* Flame physics
+* rigid body simulation
+
+This game needs:
+
+* fake deterministic gravity
+* exact predictable results
+
+Landing position should be mathematically calculated:
+
+```dart
+landingIndex = columns[column].length;
+```
+
+Not simulated physically.
+
+---
+
+# 10. MERGE RULES MUST BE EXPLICIT
+
+Define exact merge policy.
+
+Recommended:
+
+## Simultaneous Merge Resolution
+
+Meaning:
+
+* scan entire board first
+* collect all merge operations
+* execute together
+
+Never mutate during scan.
+
+This prevents inconsistent behavior like:
+
+```text
+2 2 2
+```
+
+producing random outcomes depending on iteration order.
+
+---
+
+# 11. RECOMMENDED CORE FOLDER STRUCTURE
+
+```text
+core/
+ ├── models/
+ │    ├── tile.dart
+ │    ├── board_state.dart
+ │    └── merge_operation.dart
+ │
+ ├── engine/
+ │    ├── game_engine.dart
+ │    ├── drop_resolver.dart
+ │    ├── merge_detector.dart
+ │    ├── merge_executor.dart
+ │    ├── gravity_resolver.dart
+ │    └── game_over_resolver.dart
+ │
+ ├── providers/
+ │    └── game_state_notifier.dart
+ │
+ └── ui/
+```
+
+---
+
+# 12. FINAL ARCHITECTURAL GOAL
+
+The game should operate like:
+
+```text
+spawn tile
+-> player selects column
+-> tile lands
+-> detect merges
+-> execute merges
+-> apply gravity
+-> repeat until stable
+-> check game over
+-> spawn next tile
+```
+
+NOT like classic 2048 matrix movement.
+
+This is a state-resolution simulation pipeline, not a swipe-grid puzzle.
