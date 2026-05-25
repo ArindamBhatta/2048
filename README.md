@@ -25,4 +25,5 @@ flutter build apk
 ```
 
 # Gameplay
+<video src="doc/example.mp4" width="900"/> 
 

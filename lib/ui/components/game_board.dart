@@ -31,6 +31,25 @@ class GameBoardWidget extends ConsumerWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
+                // ---- Grid Background ----
+                for (int r = 0; r < BoardState.rows; r++)
+                  for (int c = 0; c < BoardState.columns; c++)
+                    Positioned(
+                      left: c * tileSize,
+                      bottom: r * tileSize,
+                      width: tileSize,
+                      height: tileSize,
+                      child: Padding(
+                        padding: const EdgeInsets.all(2.0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                        ),
+                      ),
+                    ),
+
                 // ------ Highlight active column show to the user how it's drop-----
                 if (state.activeTile != null)
                   Positioned(
@@ -44,28 +63,32 @@ class GameBoardWidget extends ConsumerWidget {
                   ),
 
                 // ---- Boundary Line show the game over line ---
-                Positioned(
-                  top: (BoardState.rows - BoardState.boundaryRow) * tileSize,
-                  left: 0,
-                  right: 0,
-                  child: Row(
-                    children: List.generate(
-                      15,
-                      (index) => Expanded(
-                        child: Container(
-                          height: 2,
-                          color: index % 2 == 0
-                              ? Colors.white.withValues(alpha: 0.2)
-                              : Colors.transparent,
+                if (state.isGravityMode)
+                  Positioned(
+                    top: (BoardState.rows - BoardState.boundaryRow) * tileSize,
+                    left: 0,
+                    right: 0,
+                    child: Row(
+                      children: List.generate(
+                        15,
+                        (index) => Expanded(
+                          child: Container(
+                            height: 2,
+                            color: index % 2 == 0
+                                ? Colors.white.withValues(alpha: 0.2)
+                                : Colors.transparent,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
 
                 /// Static Tiles -> tiles that are already placed
                 for (final tile in state.staticTiles)
-                  Positioned(
+                  AnimatedPositioned(
+                    key: ValueKey(tile.id),
+                    duration: const Duration(milliseconds: 150),
+                    curve: Curves.easeOut,
                     left: tile.column * tileSize,
                     bottom: tile.row * tileSize, // Row 0 is at the bottom
                     width: tileSize,
@@ -82,7 +105,8 @@ class GameBoardWidget extends ConsumerWidget {
                 // Active Tile are those tile which come from top
                 if (state.activeTile != null)
                   AnimatedPositioned(
-                    duration: const Duration(milliseconds: 100),
+                    key: ValueKey(state.activeTile!.id),
+                    duration: const Duration(milliseconds: 500),
                     curve: Curves.easeOut,
                     left: state.activeTile!.column * tileSize,
                     bottom: state.activeTile!.row * tileSize,

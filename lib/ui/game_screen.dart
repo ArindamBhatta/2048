@@ -37,7 +37,7 @@ class GameScreen extends ConsumerWidget {
                   return GestureDetector(
                     ///drag event started
                     ///The moment finger first touches the widget.
-                    onPanDown: (details) {
+                    onPanDown: state.isGravityMode ? (details) {
                       double width = constraints.maxWidth;
 
                       double colWidth = width / 5;
@@ -45,22 +45,40 @@ class GameScreen extends ConsumerWidget {
                       if (col >= 0 && col < 5) {
                         notifier.setMoveColumn(col);
                       }
-                    },
+                    } : null,
 
                     ///draggin joystick controls, updating positions, following finger, continuous column tracking
-                    onPanUpdate: (details) {
+                    onPanUpdate: state.isGravityMode ? (details) {
                       double width = constraints.maxWidth;
                       double colWidth = width / 5;
                       int col = (details.localPosition.dx / colWidth).floor();
                       if (col >= 0 && col < 5) {
                         notifier.setMoveColumn(col);
                       }
-                    },
+                    } : null,
 
                     ///dropping objects, finishing drag, inertia physics, snapping, confirming actions
-                    onPanEnd: (details) {
+                    onPanEnd: state.isGravityMode ? (details) {
                       notifier.dropTile();
-                    },
+                    } : null,
+
+                    onHorizontalDragEnd: !state.isGravityMode ? (details) {
+                      if (details.primaryVelocity == null) return;
+                      if (details.primaryVelocity! > 0) {
+                        notifier.swipe('right');
+                      } else if (details.primaryVelocity! < 0) {
+                        notifier.swipe('left');
+                      }
+                    } : null,
+
+                    onVerticalDragEnd: !state.isGravityMode ? (details) {
+                      if (details.primaryVelocity == null) return;
+                      if (details.primaryVelocity! > 0) {
+                        notifier.swipe('down');
+                      } else if (details.primaryVelocity! < 0) {
+                        notifier.swipe('up');
+                      }
+                    } : null,
 
                     ///Stack widget allows us to layer widgets on top of each other
                     child: Stack(

@@ -7,6 +7,7 @@ class BoardState {
   final bool gameOver;
   final int score;
   final bool isAnimating;
+  final bool isGravityMode;
 
   static const int columns = 5;
   static const int rows = 8;
@@ -20,6 +21,7 @@ class BoardState {
     this.gameOver = false,
     this.score = 0,
     this.isAnimating = false,
+    this.isGravityMode = true,
   });
 
   BoardState copyWith({
@@ -29,6 +31,7 @@ class BoardState {
     bool? gameOver,
     int? score,
     bool? isAnimating,
+    bool? isGravityMode,
   }) {
     return BoardState(
       staticTiles: staticTiles ?? this.staticTiles,
@@ -37,6 +40,7 @@ class BoardState {
       gameOver: gameOver ?? this.gameOver,
       score: score ?? this.score,
       isAnimating: isAnimating ?? this.isAnimating,
+      isGravityMode: isGravityMode ?? this.isGravityMode,
     );
   }
 
@@ -48,6 +52,7 @@ class BoardState {
       gameOver: gameOver,
       score: score,
       isAnimating: isAnimating,
+      isGravityMode: isGravityMode,
     );
   }
 
@@ -57,6 +62,7 @@ class BoardState {
     bool? gameOver,
     int? score,
     bool? isAnimating,
+    bool? isGravityMode,
   }) {
      return BoardState(
       staticTiles: staticTiles ?? this.staticTiles,
@@ -65,6 +71,7 @@ class BoardState {
       gameOver: gameOver ?? this.gameOver,
       score: score ?? this.score,
       isAnimating: isAnimating ?? this.isAnimating,
+      isGravityMode: isGravityMode ?? this.isGravityMode,
     );
   }
 }

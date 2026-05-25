@@ -14,11 +14,21 @@ class GameNotifier extends Notifier<BoardState> {
   @override
   BoardState build() {
     _engine = ref.read(gameEngineProvider);
-    return _engine.getInitialState();
+    return _engine.getInitialState(true);
   }
 
   void resetGame() {
-    state = _engine.getInitialState();
+    state = _engine.getInitialState(state.isGravityMode);
+  }
+
+  void toggleMode() {
+    state = state.copyWith(isGravityMode: !state.isGravityMode);
+    resetGame();
+  }
+
+  void swipe(String direction) {
+    if (state.gameOver || state.isGravityMode || state.isAnimating) return;
+    state = _engine.swipe(state, direction);
   }
 
   void moveActiveTile(int delta) {
@@ -37,18 +47,25 @@ class GameNotifier extends Notifier<BoardState> {
   void setMoveColumn(int column) {
     if (state.gameOver || state.activeTile == null || state.isAnimating) return;
     if (column >= 0 && column < BoardState.columns) {
-       state = state.copyWithActiveTile(
+      state = state.copyWithActiveTile(
         state.activeTile!.copyWith(column: column),
       );
     }
   }
 
-  void dropTile() {
+  Future<void> dropTile() async {
     if (state.gameOver || state.activeTile == null || state.isAnimating) return;
 
-    // Set animating flag so we don't process inputs during logic
-    // We could add delays here for visual effect, but for now we settle instantly.
-    // A more advanced version would use async/await and Future.delayed.
+    state = state.copyWith(isAnimating: true);
+    final active = state.activeTile!;
+    final landingRow = _engine.calculateDropLanding(state, active.column);
+
+    // Update state to animate the drop
+    state = state.copyWithActiveTile(active.copyWith(row: landingRow));
+
+    //
+    await Future.delayed(const Duration(milliseconds: 100));
+
     state = _engine.settleActiveTile(state);
   }
 }

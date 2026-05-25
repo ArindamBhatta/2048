@@ -25,15 +25,19 @@ class HeaderWidget extends ConsumerWidget {
                 },
               ),
               Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white24,
+                decoration: BoxDecoration(
+                  color: state.isGravityMode ? Colors.white24 : Colors.blueAccent.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.settings, color: Colors.white),
+                  icon: Icon(
+                    state.isGravityMode ? Icons.settings : Icons.grid_on, 
+                    color: Colors.white
+                  ),
                   onPressed: () {
-                    // settings placeholder
+                    ref.read(gameStateProvider.notifier).toggleMode();
                   },
+                  tooltip: state.isGravityMode ? 'Switch to Classic Mode' : 'Switch to Gravity Mode',
                 ),
               ),
             ],

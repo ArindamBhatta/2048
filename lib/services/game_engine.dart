@@ -11,13 +11,41 @@ class GameEngine {
   }
 
   /// Initialize the board with a fresh active tile and next tile preview.
-  BoardState getInitialState() {
-    return BoardState(
-      activeTile: _createSpawnTile(BoardState.columns ~/ 2, _getRandomValue()),
-      nextTileValue: _getRandomValue(),
-      score: 0,
-      gameOver: false,
-    );
+  BoardState getInitialState([bool isGravityMode = true]) {
+    if (isGravityMode) {
+      return BoardState(
+        activeTile: _createSpawnTile(BoardState.columns ~/ 2, _getRandomValue()),
+        nextTileValue: _getRandomValue(),
+        score: 0,
+        gameOver: false,
+        isGravityMode: true,
+      );
+    } else {
+      BoardState state = BoardState(
+        score: 0,
+        gameOver: false,
+        isGravityMode: false,
+      );
+      state = _spawnRandomStaticTile(state);
+      state = _spawnRandomStaticTile(state);
+      return state;
+    }
+  }
+
+  BoardState _spawnRandomStaticTile(BoardState state) {
+    List<Point<int>> emptySpots = [];
+    for (int r = 0; r < BoardState.rows; r++) {
+      for (int c = 0; c < BoardState.columns; c++) {
+        if (!state.staticTiles.any((t) => t.row == r && t.column == c)) {
+          emptySpots.add(Point(c, r));
+        }
+      }
+    }
+    if (emptySpots.isEmpty) return state;
+    
+    final spot = emptySpots[_random.nextInt(emptySpots.length)];
+    final newTile = Tile(value: _getRandomValue(), column: spot.x, row: spot.y);
+    return state.copyWithUpdates(staticTiles: [...state.staticTiles, newTile]);
   }
 
   Tile _createSpawnTile(int column, int value) {
@@ -180,6 +208,103 @@ class GameEngine {
     }
     
     return _MergeResult(currentTiles, score, false);
+  }
+
+  BoardState swipe(BoardState state, String direction) {
+    if (state.gameOver || state.isGravityMode) return state;
+
+    List<Tile> currentTiles = List.from(state.staticTiles);
+    bool changed = false;
+    int currentScore = state.score;
+
+    if (direction == 'left' || direction == 'right') {
+      for (int r = 0; r < BoardState.rows; r++) {
+        List<Tile> rowTiles = currentTiles.where((t) => t.row == r).toList();
+        rowTiles.sort((a, b) => a.column.compareTo(b.column));
+        if (direction == 'right') rowTiles = rowTiles.reversed.toList();
+
+        int insertPos = direction == 'left' ? 0 : BoardState.columns - 1;
+        int step = direction == 'left' ? 1 : -1;
+
+        for (int i = 0; i < rowTiles.length; i++) {
+          Tile t = rowTiles[i];
+          if (i < rowTiles.length - 1 && rowTiles[i].value == rowTiles[i+1].value) {
+            currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == rowTiles[i+1].id);
+            final merged = t.copyWith(value: t.value * 2, column: insertPos);
+            currentTiles.add(merged);
+            currentScore += merged.value;
+            changed = true;
+            insertPos += step;
+            i++; 
+          } else {
+            if (t.column != insertPos) {
+              changed = true;
+              currentTiles.removeWhere((tile) => tile.id == t.id);
+              currentTiles.add(t.copyWith(column: insertPos));
+            }
+            insertPos += step;
+          }
+        }
+      }
+    } else if (direction == 'up' || direction == 'down') {
+      for (int c = 0; c < BoardState.columns; c++) {
+        List<Tile> colTiles = currentTiles.where((t) => t.column == c).toList();
+        colTiles.sort((a, b) => a.row.compareTo(b.row));
+        if (direction == 'up') colTiles = colTiles.reversed.toList();
+        
+        int insertPos = direction == 'down' ? 0 : BoardState.rows - 1;
+        int step = direction == 'down' ? 1 : -1;
+        
+        for (int i = 0; i < colTiles.length; i++) {
+          Tile t = colTiles[i];
+          if (i < colTiles.length - 1 && colTiles[i].value == colTiles[i+1].value) {
+            currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == colTiles[i+1].id);
+            final merged = t.copyWith(value: t.value * 2, row: insertPos);
+            currentTiles.add(merged);
+            currentScore += merged.value;
+            changed = true;
+            insertPos += step;
+            i++; 
+          } else {
+            if (t.row != insertPos) {
+              changed = true;
+              currentTiles.removeWhere((tile) => tile.id == t.id);
+              currentTiles.add(t.copyWith(row: insertPos));
+            }
+            insertPos += step;
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      BoardState newState = state.copyWithUpdates(staticTiles: currentTiles, score: currentScore);
+      newState = _spawnRandomStaticTile(newState);
+      
+      bool canMove = false;
+      if (newState.staticTiles.length < BoardState.columns * BoardState.rows) {
+        canMove = true;
+      } else {
+        for (int r = 0; r < BoardState.rows; r++) {
+          for (int c = 0; c < BoardState.columns; c++) {
+             Tile? t = newState.staticTiles.cast<Tile?>().firstWhere((t) => t?.row == r && t?.column == c, orElse: () => null);
+             if (t != null) {
+               Tile? right = newState.staticTiles.cast<Tile?>().firstWhere((t2) => t2?.row == r && t2?.column == c+1, orElse: () => null);
+               Tile? top = newState.staticTiles.cast<Tile?>().firstWhere((t2) => t2?.row == r+1 && t2?.column == c, orElse: () => null);
+               if (right != null && right.value == t.value) canMove = true;
+               if (top != null && top.value == t.value) canMove = true;
+             }
+          }
+        }
+      }
+      
+      if (!canMove) {
+        newState = newState.copyWithUpdates(gameOver: true);
+      }
+      return newState;
+    }
+
+    return state;
   }
 }
 
