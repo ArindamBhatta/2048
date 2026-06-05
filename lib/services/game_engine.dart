@@ -2,116 +2,129 @@ import 'dart:math';
 import '../models/board_state.dart';
 import '../models/tile.dart';
 
+/// The core game solver that computes deterministic physics-inspired transformations,
+/// including gravity adjustments, landing predictions, and recursive tile merges.
+///
+/// **Why this is here:**
+/// Separating the math/physics engine from the UI widgets and State Notifiers
+/// ensures that the core 2048 game rules can be tested in isolation and are
+/// independent of the rendering framework.
 class GameEngine {
   final Random _random = Random();
+  
+  // Possible values that can spawn for new tiles.
   final List<int> _possibleValues = [2, 4, 8, 16];
 
+  /// Helper to pick a random value for newly generated tiles.
   int _getRandomValue() {
     return _possibleValues[_random.nextInt(_possibleValues.length)];
   }
 
-  /// Initialize the board with a fresh active tile and next tile preview.
-  BoardState getInitialState([bool isGravityMode = true]) {
-    if (isGravityMode) {
-      return BoardState(
-        activeTile: _createSpawnTile(BoardState.columns ~/ 2, _getRandomValue()),
-        nextTileValue: _getRandomValue(),
-        score: 0,
-        gameOver: false,
-        isGravityMode: true,
-      );
-    } else {
-      BoardState state = BoardState(
-        score: 0,
-        gameOver: false,
-        isGravityMode: false,
-      );
-      state = _spawnRandomStaticTile(state);
-      state = _spawnRandomStaticTile(state);
-      
-      int maxScore = 0;
-      for (var t in state.staticTiles) {
-        if (t.value > maxScore) maxScore = t.value;
-      }
-      return state.copyWithUpdates(score: maxScore);
-    }
-  }
-
-  BoardState _spawnRandomStaticTile(BoardState state) {
-    List<Point<int>> emptySpots = [];
-    for (int r = 0; r < BoardState.rows; r++) {
-      for (int c = 0; c < BoardState.columns; c++) {
-        if (!state.staticTiles.any((t) => t.row == r && t.column == c)) {
-          emptySpots.add(Point(c, r));
-        }
-      }
-    }
-    if (emptySpots.isEmpty) return state;
+  /// Initializes the board state at the start of a new session.
+  /// 
+  /// **Why this is here:**
+  /// When a game starts, we need a spawning active tile at the top-center
+  /// of the virtual bucket, and a preview value for the next tile that will spawn.
+  BoardState getInitialState() {
+    const double spawnX = (BoardState.bucketWidth - BoardState.tileSize) / 2;
+    const double spawnY = BoardState.bucketHeight - BoardState.tileSize;
     
-    final spot = emptySpots[_random.nextInt(emptySpots.length)];
-    final newTile = Tile(value: _getRandomValue(), column: spot.x, row: spot.y);
-    return state.copyWithUpdates(staticTiles: [...state.staticTiles, newTile]);
-  }
-
-  Tile _createSpawnTile(int column, int value) {
-    return Tile(
-      value: value,
-      column: column,
-      row: BoardState.spawnRow,
+    return BoardState(
+      activeTile: Tile(
+        value: _getRandomValue(),
+        x: spawnX,
+        y: spawnY,
+      ),
+      nextTileValue: _getRandomValue(),
+      score: 0,
+      gameOver: false,
     );
   }
 
-  /// Spawns a new active tile. If the spawn column is full, it's game over.
+  /// Spawns a new active tile at the top-center of the bucket.
+  /// 
+  /// **Why this is here:**
+  /// If the top-center entry point is blocked (i.e. settled tiles are stacked up 
+  /// past the warning/limit line), the spawn fails and a game-over is triggered.
   BoardState spawnNextTile(BoardState state) {
-    const spawnColumn = BoardState.columns ~/ 2;
-    // Check if spawn column is already occupied at boundary
-    if (state.staticTiles.any((t) => t.column == spawnColumn && t.row >= BoardState.boundaryRow)) {
+    const double spawnX = (BoardState.bucketWidth - BoardState.tileSize) / 2;
+    const double spawnY = BoardState.bucketHeight - BoardState.tileSize;
+
+    // Verify if there are any settled static tiles near the spawning area.
+    final bool isOccupied = state.staticTiles.any((t) =>
+        t.y + BoardState.tileSize > BoardState.warningLineY &&
+        (t.x - spawnX).abs() < BoardState.tileSize);
+
+    if (isOccupied) {
+      // Trigger Game Over and clear the active tile.
       return state.copyWithUpdates(gameOver: true, isAnimating: false);
     }
 
+    // Spawn a new active tile with the pre-rolled value, and roll a new upcoming value.
     return state.copyWithUpdates(
       nextTileValue: _getRandomValue(),
       isAnimating: false,
-    ).copyWithActiveTile(_createSpawnTile(spawnColumn, state.nextTileValue));
+    ).copyWithActiveTile(Tile(
+      value: state.nextTileValue,
+      x: spawnX,
+      y: spawnY,
+    ));
   }
 
-  /// Calculates the landing row for a tile in a specific column.
-  int calculateDropLanding(BoardState state, int column) {
-    int maxRow = -1;
+  /// Calculates the final Y position where a falling tile will land.
+  /// 
+  /// **Why this is here:**
+  /// Since the game bucket allows continuous horizontal movement, we need to
+  /// check which static tiles overlap horizontally with the dropped tile's X coordinate,
+  /// and stack the dropped tile directly on top of the highest overlapping tile.
+  double calculateDropLanding(BoardState state, double x) {
+    double maxY = 0.0;
     for (final tile in state.staticTiles) {
-      if (tile.column == column && tile.row > maxRow) {
-        maxRow = tile.row;
+      // Check if the falling tile (positioned at 'x') overlaps horizontally with this static tile.
+      if ((x < tile.x + BoardState.tileSize) && (x + BoardState.tileSize > tile.x)) {
+        // Find the top edge of the highest overlapping tile.
+        if (tile.y + BoardState.tileSize > maxY) {
+          maxY = tile.y + BoardState.tileSize;
+        }
       }
     }
-    return maxRow + 1;
+    return maxY;
   }
 
-  /// Core logic for settling a dropped tile. It calculates its landing spot,
-  /// adds it to static tiles, and processes all chain reactions.
+  /// Core logic for settling a dropped tile, applying gravity, and performing merges.
+  /// 
+  /// **Why this is here:**
+  /// Dropping a tile isn't just about placing it. It can cause a chain reaction:
+  /// 1. The tile lands and joins the list of static tiles.
+  /// 2. It might merge with an adjacent tile of the same value.
+  /// 3. If a merge happens, the remaining tiles might be left suspended in the air.
+  ///    We must pull them down under gravity.
+  /// 4. Pulling tiles down can trigger new merges, which triggers more gravity.
+  /// This loop runs recursively until the board settles.
   BoardState settleActiveTile(BoardState state) {
     if (state.activeTile == null) return state;
 
     final active = state.activeTile!;
-    final landingRow = calculateDropLanding(state, active.column);
+    final landingY = calculateDropLanding(state, active.x);
     
-    // Create the landed tile
-    final landedTile = active.copyWith(row: landingRow);
+    // Create the landed tile at its final Y position.
+    final landedTile = active.copyWith(y: landingY);
     
-    // Add to static tiles
+    // Append the newly landed tile to the static list.
     List<Tile> currentTiles = List.from(state.staticTiles)..add(landedTile);
 
     bool boardChanged = true;
     while (boardChanged) {
       boardChanged = false;
 
-      // 1. Apply gravity to all tiles
+      // 1. Apply gravity to pull down any floating tiles.
       final gravityResult = _applyGravity(currentTiles);
       if (gravityResult.changed) {
         currentTiles = gravityResult.tiles;
         boardChanged = true;
       }
 
-      // 2. Evaluate merges
+      // 2. Perform merges for any adjacent tiles with matching values.
       final mergeResult = _evaluateMerges(currentTiles);
       if (mergeResult.changed) {
         currentTiles = mergeResult.tiles;
@@ -119,9 +132,10 @@ class GameEngine {
       }
     }
 
-    // Check game over
-    bool isGameOver = currentTiles.any((t) => t.row >= BoardState.boundaryRow);
+    // Check game over: check if any static tile exceeds the warning limit line.
+    bool isGameOver = currentTiles.any((t) => t.y + BoardState.tileSize > BoardState.warningLineY);
 
+    // Calculate score based on the highest-value tile currently on the board.
     int maxScore = 0;
     for (var t in currentTiles) {
       if (t.value > maxScore) maxScore = t.value;
@@ -134,188 +148,94 @@ class GameEngine {
       isAnimating: false,
     ).copyWithActiveTile(null);
 
+    // Spawn the next tile if the game is still active.
     if (!isGameOver) {
-       // We'll let the GameStateNotifier spawn the next tile after animations,
-       // but for purely logical flow, we could spawn it here.
-       // Let's spawn it.
        return spawnNextTile(nextState);
     }
     return nextState;
   }
 
+  /// Pulls down all floating tiles so they rest on the floor or on other tiles.
+  /// 
+  /// **Why this is here:**
+  /// When tiles merge, a gap can form below the top tiles. Gravity must be resolved
+  /// starting from the bottom-most tiles upwards, recalculating their landing heights.
   _GravityResult _applyGravity(List<Tile> tiles) {
     bool changed = false;
-    List<Tile> newTiles = [];
     
-    // Group by column
-    Map<int, List<Tile>> cols = {};
-    for (int c = 0; c < BoardState.columns; c++) {
-      cols[c] = [];
-    }
-    for (final t in tiles) {
-      cols[t.column]!.add(t);
-    }
+    // Sort from bottom to top (ascending Y coordinate) to process lower tiles first.
+    List<Tile> sorted = List.from(tiles)..sort((a, b) => a.y.compareTo(b.y));
+    List<Tile> settled = [];
 
-    for (int c = 0; c < BoardState.columns; c++) {
-      // Sort by row ascending (bottom to top)
-      cols[c]!.sort((a, b) => a.row.compareTo(b.row));
-      
-      int expectedRow = 0;
-      for (int i = 0; i < cols[c]!.length; i++) {
-        final t = cols[c]![i];
-        if (t.row != expectedRow) {
-          changed = true;
-          newTiles.add(t.copyWith(row: expectedRow));
-        } else {
-          newTiles.add(t);
+    for (final t in sorted) {
+      double landingY = 0.0;
+      for (final s in settled) {
+        // Horizontal overlap check with already settled tiles.
+        if ((t.x < s.x + BoardState.tileSize) && (t.x + BoardState.tileSize > s.x)) {
+          if (s.y + BoardState.tileSize > landingY) {
+            landingY = s.y + BoardState.tileSize;
+          }
         }
-        expectedRow++;
+      }
+
+      // If the tile's current Y is different from its calculated landing Y, update it.
+      if ((landingY - t.y).abs() > 0.01) {
+        changed = true;
+        settled.add(t.copyWith(y: landingY));
+      } else {
+        settled.add(t);
       }
     }
     
-    return _GravityResult(newTiles, changed);
+    return _GravityResult(settled, changed);
   }
 
+  /// Scans the board for adjacent tiles with matching values and merges them.
+  /// 
+  /// **Why this is here:**
+  /// In 2048, two matching tiles merge when they touch. Since our game supports
+  /// continuous physics coordinates, "touching" means their bounding boxes overlap or touch
+  /// within a small threshold (epsilon).
   _MergeResult _evaluateMerges(List<Tile> tiles) {
     List<Tile> currentTiles = List.from(tiles);
-    
-    // Group by col and row for easy lookup
-    Tile? getTileAt(int col, int row) {
-      for (final t in currentTiles) {
-        if (t.column == col && t.row == row) return t;
-      }
-      return null;
+    const double epsilon = 2.0; // Distance tolerance threshold for touching tiles
+    const double size = BoardState.tileSize;
+
+    // Checks if t1 and t2 are adjacent and touching horizontally or vertically.
+    bool areTouching(Tile t1, Tile t2) {
+      final double xDist = (t1.x - t2.x).abs();
+      final double yDist = (t1.y - t2.y).abs();
+
+      // Horizontally overlapping and vertically touching.
+      bool verticalTouch = xDist < size - epsilon && yDist <= size + epsilon;
+      // Vertically overlapping and horizontally touching.
+      bool horizontalTouch = yDist < size - epsilon && xDist <= size + epsilon;
+
+      return verticalTouch || horizontalTouch;
     }
 
-    // We'll find ONE merge, do it, and return. The while loop in settleActiveTile will catch the rest.
-    // This simplifies chain reaction logic.
-    // Order of precedence: We should probably evaluate from bottom to top.
-    for (int r = 0; r < BoardState.rows; r++) {
-      for (int c = 0; c < BoardState.columns; c++) {
-        final t = getTileAt(c, r);
-        if (t == null) continue;
+    // Search for a matching pair to merge.
+    for (int i = 0; i < currentTiles.length; i++) {
+      for (int j = i + 1; j < currentTiles.length; j++) {
+        final t1 = currentTiles[i];
+        final t2 = currentTiles[j];
 
-        // Check vertical merge (tile above this one)
-        final tAbove = getTileAt(c, r + 1);
-        if (tAbove != null && tAbove.value == t.value) {
-          // Merge tAbove INTO t
-          currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == tAbove.id);
-          currentTiles.add(t.copyWith(value: t.value * 2)); // keeps t's position
-          return _MergeResult(currentTiles, true);
-        }
+        if (t1.value == t2.value && areTouching(t1, t2)) {
+          // Keep the lower tile's position/identity to preserve smooth animation paths.
+          final lowerTile = t1.y <= t2.y ? t1 : t2;
+          
+          // Remove both merged tiles from the list.
+          currentTiles.removeAt(j); // Remove higher index first to avoid index shifting.
+          currentTiles.removeAt(i);
 
-        // Check horizontal merge (tile to the right)
-        final tRight = getTileAt(c + 1, r);
-        if (tRight != null && tRight.value == t.value) {
-          // Merge tRight INTO t
-          currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == tRight.id);
-          currentTiles.add(t.copyWith(value: t.value * 2));
+          // Add the newly combined double-value tile.
+          currentTiles.add(lowerTile.copyWith(value: t1.value * 2));
           return _MergeResult(currentTiles, true);
         }
       }
     }
     
     return _MergeResult(currentTiles, false);
-  }
-
-  BoardState swipe(BoardState state, String direction) {
-    if (state.gameOver || state.isGravityMode) return state;
-
-    List<Tile> currentTiles = List.from(state.staticTiles);
-    bool changed = false;
-
-    if (direction == 'left' || direction == 'right') {
-      for (int r = 0; r < BoardState.rows; r++) {
-        List<Tile> rowTiles = currentTiles.where((t) => t.row == r).toList();
-        rowTiles.sort((a, b) => a.column.compareTo(b.column));
-        if (direction == 'right') rowTiles = rowTiles.reversed.toList();
-
-        int insertPos = direction == 'left' ? 0 : BoardState.columns - 1;
-        int step = direction == 'left' ? 1 : -1;
-
-        for (int i = 0; i < rowTiles.length; i++) {
-          Tile t = rowTiles[i];
-          if (i < rowTiles.length - 1 && rowTiles[i].value == rowTiles[i+1].value) {
-            currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == rowTiles[i+1].id);
-            final merged = t.copyWith(value: t.value * 2, column: insertPos);
-            currentTiles.add(merged);
-            changed = true;
-            insertPos += step;
-            i++; 
-          } else {
-            if (t.column != insertPos) {
-              changed = true;
-              currentTiles.removeWhere((tile) => tile.id == t.id);
-              currentTiles.add(t.copyWith(column: insertPos));
-            }
-            insertPos += step;
-          }
-        }
-      }
-    } else if (direction == 'up' || direction == 'down') {
-      for (int c = 0; c < BoardState.columns; c++) {
-        List<Tile> colTiles = currentTiles.where((t) => t.column == c).toList();
-        colTiles.sort((a, b) => a.row.compareTo(b.row));
-        if (direction == 'up') colTiles = colTiles.reversed.toList();
-        
-        int insertPos = direction == 'down' ? 0 : BoardState.rows - 1;
-        int step = direction == 'down' ? 1 : -1;
-        
-        for (int i = 0; i < colTiles.length; i++) {
-          Tile t = colTiles[i];
-          if (i < colTiles.length - 1 && colTiles[i].value == colTiles[i+1].value) {
-            currentTiles.removeWhere((tile) => tile.id == t.id || tile.id == colTiles[i+1].id);
-            final merged = t.copyWith(value: t.value * 2, row: insertPos);
-            currentTiles.add(merged);
-            changed = true;
-            insertPos += step;
-            i++; 
-          } else {
-            if (t.row != insertPos) {
-              changed = true;
-              currentTiles.removeWhere((tile) => tile.id == t.id);
-              currentTiles.add(t.copyWith(row: insertPos));
-            }
-            insertPos += step;
-          }
-        }
-      }
-    }
-
-    if (changed) {
-      BoardState newState = state.copyWithUpdates(staticTiles: currentTiles);
-      newState = _spawnRandomStaticTile(newState);
-      
-      int maxScore = 0;
-      for (var t in newState.staticTiles) {
-        if (t.value > maxScore) maxScore = t.value;
-      }
-      newState = newState.copyWithUpdates(score: maxScore);
-      
-      bool canMove = false;
-      if (newState.staticTiles.length < BoardState.columns * BoardState.rows) {
-        canMove = true;
-      } else {
-        for (int r = 0; r < BoardState.rows; r++) {
-          for (int c = 0; c < BoardState.columns; c++) {
-             Tile? t = newState.staticTiles.cast<Tile?>().firstWhere((t) => t?.row == r && t?.column == c, orElse: () => null);
-             if (t != null) {
-               Tile? right = newState.staticTiles.cast<Tile?>().firstWhere((t2) => t2?.row == r && t2?.column == c+1, orElse: () => null);
-               Tile? top = newState.staticTiles.cast<Tile?>().firstWhere((t2) => t2?.row == r+1 && t2?.column == c, orElse: () => null);
-               if (right != null && right.value == t.value) canMove = true;
-               if (top != null && top.value == t.value) canMove = true;
-             }
-          }
-        }
-      }
-      
-      if (!canMove) {
-        newState = newState.copyWithUpdates(gameOver: true);
-      }
-      return newState;
-    }
-
-    return state;
   }
 }
 

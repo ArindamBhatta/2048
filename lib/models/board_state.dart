@@ -7,12 +7,12 @@ class BoardState {
   final bool gameOver;
   final int score;
   final bool isAnimating;
-  final bool isGravityMode;
 
-  static const int columns = 5;
-  static const int rows = 8;
-  static const int spawnRow = 7;
-  static const int boundaryRow = 6;
+  // Virtual Coordinate Constants
+  static const double bucketWidth = 400.0;
+  static const double bucketHeight = 600.0;
+  static const double tileSize = 50.0;
+  static const double warningLineY = 500.0;
 
   BoardState({
     this.staticTiles = const [],
@@ -21,7 +21,6 @@ class BoardState {
     this.gameOver = false,
     this.score = 0,
     this.isAnimating = false,
-    this.isGravityMode = true,
   });
 
   BoardState copyWith({
@@ -31,7 +30,6 @@ class BoardState {
     bool? gameOver,
     int? score,
     bool? isAnimating,
-    bool? isGravityMode,
   }) {
     return BoardState(
       staticTiles: staticTiles ?? this.staticTiles,
@@ -40,7 +38,6 @@ class BoardState {
       gameOver: gameOver ?? this.gameOver,
       score: score ?? this.score,
       isAnimating: isAnimating ?? this.isAnimating,
-      isGravityMode: isGravityMode ?? this.isGravityMode,
     );
   }
 
@@ -52,7 +49,6 @@ class BoardState {
       gameOver: gameOver,
       score: score,
       isAnimating: isAnimating,
-      isGravityMode: isGravityMode,
     );
   }
 
@@ -62,16 +58,14 @@ class BoardState {
     bool? gameOver,
     int? score,
     bool? isAnimating,
-    bool? isGravityMode,
   }) {
-     return BoardState(
+    return BoardState(
       staticTiles: staticTiles ?? this.staticTiles,
       activeTile: activeTile,
       nextTileValue: nextTileValue ?? this.nextTileValue,
       gameOver: gameOver ?? this.gameOver,
       score: score ?? this.score,
       isAnimating: isAnimating ?? this.isAnimating,
-      isGravityMode: isGravityMode ?? this.isGravityMode,
     );
   }
 }

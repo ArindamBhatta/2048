@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/board_state.dart';
 import '../state/game_state_notifier.dart';
 import 'components/game_board.dart';
 import 'components/header.dart';
@@ -9,10 +10,7 @@ class GameScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ///watch - will rebuild the widget when the state changes
     final state = ref.watch(gameStateProvider);
-
-    ///read - will not rebuild the widget when the state changes, used for callbacks
     final notifier = ref.read(gameStateProvider.notifier);
 
     return Scaffold(
@@ -21,7 +19,7 @@ class GameScreen extends ConsumerWidget {
         bottom: false,
         child: Column(
           children: [
-            /// header widget which contains the score and other buttons
+            /// header widget which contains the score and reset button
             const HeaderWidget(),
 
             /// Separator line under header
@@ -34,62 +32,41 @@ class GameScreen extends ConsumerWidget {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  // Calculate the scale and positioning of the board
+                  final double scaleX = constraints.maxWidth / BoardState.bucketWidth;
+                  final double scaleY = constraints.maxHeight / BoardState.bucketHeight;
+                  final double scale = scaleX < scaleY ? scaleX : scaleY;
+
+                  final double boardWidth = BoardState.bucketWidth * scale;
+                  final double boardLeft = (constraints.maxWidth - boardWidth) / 2;
+
+                  void handleDragUpdate(Offset localPosition) {
+                    final double touchXOnBoard = localPosition.dx - boardLeft;
+                    final double virtualX = (touchXOnBoard / boardWidth) * BoardState.bucketWidth;
+                    // Center the tile under the user's finger
+                    final double centeredX = virtualX - BoardState.tileSize / 2;
+                    notifier.setMoveX(centeredX);
+                  }
+
                   return GestureDetector(
-                    ///drag event started
-                    ///The moment finger first touches the widget.
-                    onPanDown: state.isGravityMode ? (details) {
-                      double width = constraints.maxWidth;
-
-                      double colWidth = width / 5;
-                      int col = (details.localPosition.dx / colWidth).floor();
-                      if (col >= 0 && col < 5) {
-                        notifier.setMoveColumn(col);
-                      }
-                    } : null,
-
-                    ///draggin joystick controls, updating positions, following finger, continuous column tracking
-                    onPanUpdate: state.isGravityMode ? (details) {
-                      double width = constraints.maxWidth;
-                      double colWidth = width / 5;
-                      int col = (details.localPosition.dx / colWidth).floor();
-                      if (col >= 0 && col < 5) {
-                        notifier.setMoveColumn(col);
-                      }
-                    } : null,
-
-                    ///dropping objects, finishing drag, inertia physics, snapping, confirming actions
-                    onPanEnd: state.isGravityMode ? (details) {
+                    behavior: HitTestBehavior.opaque,
+                    onPanStart: (details) {
+                      handleDragUpdate(details.localPosition);
+                    },
+                    onPanUpdate: (details) {
+                      handleDragUpdate(details.localPosition);
+                    },
+                    onPanEnd: (details) {
                       notifier.dropTile();
-                    } : null,
-
-                    onHorizontalDragEnd: !state.isGravityMode ? (details) {
-                      if (details.primaryVelocity == null) return;
-                      if (details.primaryVelocity! > 0) {
-                        notifier.swipe('right');
-                      } else if (details.primaryVelocity! < 0) {
-                        notifier.swipe('left');
-                      }
-                    } : null,
-
-                    onVerticalDragEnd: !state.isGravityMode ? (details) {
-                      if (details.primaryVelocity == null) return;
-                      if (details.primaryVelocity! > 0) {
-                        notifier.swipe('down');
-                      } else if (details.primaryVelocity! < 0) {
-                        notifier.swipe('up');
-                      }
-                    } : null,
-
-                    ///Stack widget allows us to layer widgets on top of each other
+                    },
                     child: Stack(
-                      ///children are rendered in order, so the last widget in the list will be on top
                       children: [
                         const GameBoardWidget(),
 
                         /// game over overlay
                         if (state.gameOver)
                           Container(
-                            color: Colors.black54,
+                            color: Colors.black.withValues(alpha: 0.75),
                             child: Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
@@ -100,10 +77,25 @@ class GameScreen extends ConsumerWidget {
                                       color: Colors.white,
                                       fontSize: 48,
                                       fontWeight: FontWeight.bold,
+                                      letterSpacing: 2.0,
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Max Score Achieved: ${state.score}',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
                                   ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF65D2E9),
+                                      foregroundColor: Colors.black,
+                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                      textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                    ),
                                     onPressed: () => notifier.resetGame(),
                                     child: const Text('Play Again'),
                                   )

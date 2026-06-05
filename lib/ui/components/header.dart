@@ -10,8 +10,7 @@ class HeaderWidget extends ConsumerWidget {
     final state = ref.watch(gameStateProvider);
 
     return Container(
-      color:
-          const Color(0xFF45414C), // Slightly different shade for header area
+      color: const Color(0xFF45414C), // Slightly different shade for header area
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       child: Stack(
         alignment: Alignment.center,
@@ -20,30 +19,33 @@ class HeaderWidget extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                decoration: BoxDecoration(
-                  color: state.isGravityMode
-                      ? Colors.white24
-                      : Colors.blueAccent.withValues(alpha: 0.5),
+                decoration: const BoxDecoration(
+                  color: Colors.white24,
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: Icon(
-                      state.isGravityMode ? Icons.settings : Icons.grid_on,
-                      color: Colors.white),
+                  icon: const Icon(Icons.refresh, color: Colors.white),
                   onPressed: () {
-                    ref.read(gameStateProvider.notifier).toggleMode();
+                    ref.read(gameStateProvider.notifier).resetGame();
                   },
-                  tooltip: state.isGravityMode
-                      ? 'Switch to Classic Mode'
-                      : 'Switch to Gravity Mode',
+                  tooltip: 'Reset Game',
+                ),
+              ),
+              const Text(
+                'GRAVITY 2048',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  letterSpacing: 1.2,
                 ),
               ),
             ],
           ),
           Text(
-            '${state.score}',
+            'Score: ${state.score}',
             style: const TextStyle(
-              fontSize: 32,
+              fontSize: 28,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
